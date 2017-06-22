@@ -33,43 +33,70 @@ public class UserDAO {
 		conn.close();
 	}
 	
-	public static boolean makeTransfer(User sender, User receiver, float value) throws SQLException{
-		Connection conn = ConnectionFactory.getConnection();
-		String sqlSender = "Update user set balance = balance - ? where id=?";
-		String sqlReceiver = "Update user set balance = balance + ? where id=?";
-		PreparedStatement stmtSender = conn.prepareStatement(sqlSender);
-		PreparedStatement stmtReceiver = conn.prepareStatement(sqlReceiver);
-		stmtSender.setFloat(1, value);
-		stmtSender.setInt(2, sender.getId());
-		stmtReceiver.setFloat(1, value);
-		stmtReceiver.setInt(2, receiver.getId());
+	
+	public static boolean makeTransfer(User sender, User receiver, float value){
+		boolean success;
+		Connection conn = null;
 		try{
+			
+			conn = ConnectionFactory.getConnection();
 			conn.setAutoCommit(false);
+			String sqlSender = "Update user set balance = balance - ? where id=?";
+			PreparedStatement stmtSender = conn.prepareStatement(sqlSender);
+			stmtSender.setFloat(1, value);
+			stmtSender.setInt(2, sender.getId());
+			String sqlReceiver = "Update user set balance = balance + ? where id=?";
+			PreparedStatement stmtReceiver = conn.prepareStatement(sqlReceiver);
+			stmtReceiver.setFloat(1, value);
+			stmtReceiver.setInt(2, receiver.getId());
 			stmtSender.executeUpdate();
 			stmtReceiver.executeUpdate();
 			conn.commit();
-			return true;
+			stmtSender.close();
+			stmtReceiver.close();
+			success = true;
 		}catch(SQLException ex){
-			conn.rollback();
-			return false;
+			System.out.println("Exceção de SQL: " + ex.getMessage());
+			if(conn != null){
+				try{
+					conn.rollback();
+				}catch(SQLException ex2){
+					System.out.println("Exceção ao realizar rollback: " + ex2.getMessage());
+				}	
+			}
+			success = false;
+		}finally{
+			if(conn != null){
+				try {
+					conn.close();
+				} catch (SQLException ex3) {
+					System.out.println("Exceção ao fechar a conexão: " + ex3.getMessage());
+				}
+			}
 		}
+		return success;
 	}
+	
 	
 	/*
 	public static boolean makeTransfer(User sender, User receiver, float value) throws SQLException{
 		Connection conn = ConnectionFactory.getConnection();
 		String sqlSender = "Update user set balance = balance - ? where id=?";
-		String sqlReceiver = "Update user set balance = balance + ? where id=?";
 		PreparedStatement stmtSender = conn.prepareStatement(sqlSender);
-		PreparedStatement stmtReceiver = conn.prepareStatement(sqlReceiver);
 		stmtSender.setFloat(1, value);
 		stmtSender.setInt(2, sender.getId());
+		String sqlReceiver = "Update user set balance = balance + ? where id=?";
+		PreparedStatement stmtReceiver = conn.prepareStatement(sqlReceiver);
 		stmtReceiver.setFloat(1, value);
 		stmtReceiver.setInt(2, receiver.getId());
 		stmtSender.executeUpdate();
 		stmtReceiver.executeUpdate();
+		stmtSender.close();
+		stmtReceiver.close();
+		conn.close();
 		return true;
-	}*/
+	}
+	*/
 	
 	public static void deleteUser(User user) throws SQLException{
 		Connection conn = ConnectionFactory.getConnection();
@@ -97,6 +124,9 @@ public class UserDAO {
 			java.util.Date createdAt = new java.util.Date(rs.getTimestamp("createdAt").getTime());
 			users.add(new User(name, username, password, balance, createdAt, id));
 		}
+		rs.close();
+		stmt.close();
+		conn.close();
 		return users;
 	}
 	
@@ -107,9 +137,9 @@ public class UserDAO {
 		stmt.setString(1, username);
 		ResultSet rs = stmt.executeQuery();
 		boolean userExists = rs.next();
+		rs.close();
 		stmt.close();
 		conn.close();
-		rs.close();
 		return userExists;
 	}
 	
@@ -119,34 +149,42 @@ public class UserDAO {
 		PreparedStatement stmt = conn.prepareStatement(sql);
 		stmt.setString(1, username);
 		ResultSet rs = stmt.executeQuery();
+		User user = null;
 		if(rs.next()){
 			int id = rs.getInt("id");
 			String name = rs.getString("name");
 			String password = rs.getString("password");
 			float balance = rs.getFloat("balance");
 			java.util.Date createdAt = new java.util.Date(rs.getTimestamp("createdAt").getTime());
-			return new User(name, username, password, balance, createdAt, id);
-		}else{
-			return null;
+			user = new User(name, username, password, balance, createdAt, id);
 		}
+		rs.close();
+		stmt.close();
+		conn.close();
+		return user;
 	}
 	
 	public static User getUserByLogin(String username, String password) throws SQLException{
 		Connection conn = ConnectionFactory.getConnection();
-		String sql = "Select * from user where username=? && password=? LIMIT 1";
-		PreparedStatement stmt = conn.prepareStatement(sql);
-		stmt.setString(1, username);
-		stmt.setString(2, password);
-		ResultSet rs = stmt.executeQuery();
-		if(rs.next()){
-			int id = rs.getInt("id");
-			String name = rs.getString("name");
-			float balance = rs.getFloat("balance");
-			java.util.Date createdAt = new java.util.Date(rs.getTimestamp("createdAt").getTime());
-			return new User(name, username, password, balance, createdAt, id);
-		}else{
-			return null;
+		String sql = "Select * from user where username=? and password=? LIMIT 1";
+		User user = null;
+		try(PreparedStatement stmt = conn.prepareStatement(sql)){
+			stmt.setString(1, username);
+			stmt.setString(2, password);
+			ResultSet rs = stmt.executeQuery();
+			if(rs.next()){
+				int id = rs.getInt("id");
+				String name = rs.getString("name");
+				float balance = rs.getFloat("balance");
+				java.util.Date createdAt = new java.util.Date(rs.getTimestamp("createdAt").getTime());
+				user = new User(name, username, password, balance, createdAt, id);
+			}
+			rs.close();
+		}catch(SQLException ex){
+			ex.printStackTrace();
 		}
+		conn.close();
+		return user;	
 	}
 	
 	
